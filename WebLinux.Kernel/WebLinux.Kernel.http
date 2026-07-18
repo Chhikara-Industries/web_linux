@@ -1,0 +1,6 @@
+@WebLinux.Kernel_HostAddress = http://localhost:5245
+
+GET {{WebLinux.Kernel_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
