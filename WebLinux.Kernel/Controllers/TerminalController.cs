@@ -11,7 +11,7 @@ public class TerminalController : ControllerBase
     public IActionResult Execute(CommandRequest request)
     {
         return Ok(
-            Shell.Execute(request.Command)
+            Shell.Execute(request.Command, request.Mode)
         );
     }
 }
@@ -20,4 +20,5 @@ public class TerminalController : ControllerBase
 public class CommandRequest
 {
     public string Command { get; set; } = "";
+    public string Mode { get; set; } = "shell";
 }

@@ -3,17 +3,23 @@ namespace WebLinux.Kernel.Core;
 public class Shell
 {
     private static readonly Session session = new Session();
+    private static readonly PythonRunner pythonRunner = new();
     private static int processCounter = 1000;
 
-    public static TerminalResponse Execute(string command)
+    public static TerminalResponse Execute(string command, string mode = "shell")
     {
+        if (mode == "python")
+        {
+            return ExecutePythonMode(command);
+        }
+
         var trimmed = command.Trim();
         if (string.IsNullOrEmpty(trimmed))
         {
             return new TerminalResponse
             {
                 Mode = "shell",
-                CurrentPath = session.CurrentPath,
+                CurrentPath = session.GetDisplayPath(),
                 History = session.History
             };
         }
@@ -31,12 +37,13 @@ public class Shell
             {
                 output = PipeCommand(rightParts[0], rightParts.Skip(1).ToArray(), leftResult);
             }
-            session.AddHistory(command, output);
+            if (trimmed != "clear")
+                session.AddHistory(command, output);
             return new TerminalResponse
             {
                 Mode = "shell",
                 Output = output,
-                CurrentPath = session.CurrentPath,
+                CurrentPath = session.GetDisplayPath(),
                 History = session.History
             };
         }
@@ -51,7 +58,7 @@ public class Shell
                 {
                     Mode = "shell",
                     Output = "code: missing file operand",
-                    CurrentPath = session.CurrentPath,
+                    CurrentPath = session.GetDisplayPath(),
                     History = session.History
                 };
             }
@@ -73,18 +80,21 @@ public class Shell
                 File = codeParts[1],
                 Language = lang,
                 Content = content,
-                CurrentPath = session.CurrentPath,
+                CurrentPath = session.GetDisplayPath(),
                 History = session.History
             };
         }
 
         output = ExecuteSingle(trimmed);
-        session.AddHistory(command, output);
+
+        if (trimmed != "clear")
+            session.AddHistory(command, output);
+
         return new TerminalResponse
         {
             Mode = "shell",
             Output = output,
-            CurrentPath = session.CurrentPath,
+            CurrentPath = session.GetDisplayPath(),
             History = session.History
         };
     }
@@ -109,7 +119,7 @@ public class Shell
             "rm" => CmdRm(args),
             "cp" => CmdCp(args),
             "mv" => CmdMv(args),
-            "clear" => "\x1b[2J\x1b[H",
+            "clear" => CmdClear(),
             "whoami" => "user",
             "hostname" => "weblinux",
             "date" => DateTime.Now.ToString("ddd MMM dd HH:mm:ss yyyy"),
@@ -167,8 +177,8 @@ public class Shell
             "git" => CmdGit(args),
             "node" => "Welcome to Node.js v20.11.0.\nType \".help\" for more information.\n> WebLinux simulated Node.js",
             "npm" => CmdNpm(args),
-            "python" => "Python 3.11.6 (main, Oct  2 2023, 00:00:00)\n[GCC 12.3.0] on linux\nType \"help\" for more info.\n>>> WebLinux simulated Python",
-            "python3" => "Python 3.11.6 (main, Oct  2 2023, 00:00:00)\n[GCC 12.3.0] on linux\nType \"help\" for more info.\n>>> WebLinux simulated Python",
+            "python" => CmdPython(args),
+            "python3" => CmdPython(args),
             "pip" => CmdPip(args),
             "pip3" => CmdPip(args),
             "gcc" => "gcc: simulated compilation - no actual compiler available\ngcc: fatal error: no input files\ncompilation terminated.",
@@ -346,6 +356,12 @@ public class Shell
             var f when f.EndsWith(".txt") => "plaintext",
             _ => "plaintext"
         };
+    }
+
+    private static string CmdClear()
+    {
+        session.ClearHistory();
+        return "";
     }
 
     private static string CmdLs(string[] args)
@@ -842,18 +858,150 @@ public class Shell
 
     private static string CmdPip(string[] args)
     {
-        if (args.Length == 0) return "usage: pip <command>";
-        return args[0] switch
+        if (args.Length == 0)
         {
-            "install" => args.Length > 1
-                ? $"Successfully installed {string.Join(" ", args.Skip(1))}"
-                : "ERROR: You gave no requirements, and no packages were installed.",
-            "list" => "Package    Version\n---------- -------\npip        23.2.1\nsetuptools 68.0.0",
-            "freeze" => "",
-            "uninstall" => args.Length > 1
-                ? $"Found existing installation: {args[1]}\nSuccessfully uninstalled {args[1]}"
-                : "ERROR: You must specify a package to uninstall",
-            _ => $"ERROR: unknown command \"{args[0]}\""
+            return "Usage: pip <command> [options]\nCommands:\n  install    Install packages\n  list       List installed packages\n  show       Show information about a package\n  uninstall  Uninstall packages";
+        }
+
+        var pipArgs = string.Join(" ", args);
+
+        if (args[0] == "--version" || args[0] == "-V")
+        {
+            return pythonRunner.GetPipVersion();
+        }
+
+        var workingDir = session.CurrentPath;
+
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = PythonRunner.FindPython(),
+            Arguments = $"-m pip {pipArgs}",
+            WorkingDirectory = workingDir,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        try
+        {
+            using var p = System.Diagnostics.Process.Start(psi);
+            if (p == null) return "pip: failed to start";
+            var stdout = p.StandardOutput.ReadToEnd();
+            var stderr = p.StandardError.ReadToEnd();
+            p.WaitForExit(60000);
+
+            var output = stdout.TrimEnd();
+            if (!string.IsNullOrEmpty(stderr))
+                output += (output.Length > 0 ? "\n" : "") + stderr.TrimEnd();
+            return string.IsNullOrEmpty(output) ? "pip: no output" : output;
+        }
+        catch (Exception e)
+        {
+            return $"pip: {e.Message}";
+        }
+    }
+
+    private static string CmdPython(string[] args)
+    {
+        if (args.Length == 0)
+        {
+            return "";
+        }
+
+        var workingDir = session.CurrentPath;
+        var allArgs = string.Join(" ", args);
+
+        if (args[0] == "-V" || args[0] == "--version")
+        {
+            return pythonRunner.GetVersion();
+        }
+
+        if (args[0] == "-h" || args[0] == "--help")
+        {
+            var ver = pythonRunner.GetVersion();
+            return $"{ver}\nUsage: python [option] [script.py [args]]\nOptions:\n  -h        show this help message and exit\n  -V        show Python version and exit\n  -c cmd    run program passed in as cmd string\n  -m mod    run library module as a script\nIf no arguments are given, enters interactive Python REPL.";
+        }
+
+        var psi = new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = PythonRunner.FindPython(),
+            Arguments = allArgs,
+            WorkingDirectory = workingDir,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+        };
+
+        try
+        {
+            using var p = System.Diagnostics.Process.Start(psi);
+            if (p == null) return "python: failed to start";
+            var stdout = p.StandardOutput.ReadToEnd();
+            var stderr = p.StandardError.ReadToEnd();
+            p.WaitForExit(30000);
+
+            var output = stdout.TrimEnd();
+            if (!string.IsNullOrEmpty(stderr))
+                output += (output.Length > 0 ? "\n" : "") + stderr.TrimEnd();
+            return string.IsNullOrEmpty(output) ? "" : output;
+        }
+        catch (Exception e)
+        {
+            return $"python: {e.Message}";
+        }
+    }
+
+    private static TerminalResponse ExecutePythonMode(string command)
+    {
+        var trimmed = command.Trim();
+
+        if (string.IsNullOrEmpty(trimmed))
+        {
+            if (!pythonRunner.IsRunning)
+            {
+                pythonRunner.Start(session.CurrentPath);
+                var ver = pythonRunner.Execute("import sys; print(f'Python {sys.version} on {sys.platform}')");
+                return new TerminalResponse
+                {
+                    Mode = "python",
+                    Output = ver + "\n>>> ",
+                    CurrentPath = session.GetDisplayPath()
+                };
+            }
+            return new TerminalResponse
+            {
+                Mode = "python",
+                Output = ">>> ",
+                CurrentPath = session.GetDisplayPath()
+            };
+        }
+
+        if (trimmed == "exit()" || trimmed == "quit()" || trimmed == "exit" || trimmed == "quit")
+        {
+            pythonRunner.Stop();
+            return new TerminalResponse
+            {
+                Mode = "shell",
+                Output = "",
+                CurrentPath = session.GetDisplayPath(),
+                History = session.History
+            };
+        }
+
+        if (!pythonRunner.IsRunning)
+        {
+            pythonRunner.Start(session.CurrentPath);
+        }
+
+        var result = pythonRunner.Execute(trimmed);
+
+        return new TerminalResponse
+        {
+            Mode = "python",
+            Output = result,
+            CurrentPath = session.GetDisplayPath()
         };
     }
 
