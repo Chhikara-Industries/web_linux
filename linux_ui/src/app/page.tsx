@@ -1,9 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import TerminalScreen from "@/components/TerminalScreen";
-import EditorScreen from "@/components/EditorScreen";
 import PythonRepl from "@/components/PythonRepl";
+
+const EditorScreen = dynamic(() => import("@/components/EditorScreen"), {
+    ssr: false,
+});
 
 export default function Home() {
     const [mode, setMode] = useState<"shell" | "editor" | "python">("shell");
