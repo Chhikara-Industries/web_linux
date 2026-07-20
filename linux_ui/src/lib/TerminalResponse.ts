@@ -13,7 +13,8 @@ export interface TerminalResponse {
 
     mode:
         | "shell"
-        | "editor";
+        | "editor"
+        | "python";
 
 
     output: string;

@@ -8,7 +8,6 @@ type EditorScreenProps = {
     language: string;
     file: string;
     content: string;
-
     onExit: () => void;
 };
 
@@ -18,54 +17,94 @@ export default function EditorScreen({
     content,
     onExit,
 }: EditorScreenProps) {
-    
+
     const [code, setCode] = useState(content);
 
     const handleEditorDidMount: OnMount = (editor) => {
-        console.log("Monaco Mounted!")
-        // Ctrl + Q -> Exit editor
         editor.addCommand(
             monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyQ,
-            () => {
-                console.log("Ctrl + Q pressed!")
-                onExit();
-            }
+            () => onExit()
         );
 
-        // Ctrl + S -> Save (placeholder)
         editor.addCommand(
             monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
             () => {
-                console.log("Ctrl + S pressed!")
-                console.log("Saving...");
-                // TODO: Send file to C# backend
+                console.log("Saving:", file);
             }
         );
+
+        editor.focus();
     };
 
     return (
-        <div className="w-full h-screen flex flex-col bg-black">
+        <div className="h-full w-full flex flex-col bg-[#1e1e1e]">
 
-            <div className="px-3 py-2 bg-zinc-900 text-white border-b border-zinc-700">
-                {file}
+            <div className="
+                flex
+                items-center
+                justify-between
+                px-3
+                py-1.5
+                bg-[#2d2d2d]
+                border-b
+                border-[#404040]
+                text-sm
+                text-neutral-400
+                shrink-0
+            ">
+                <div className="flex items-center gap-2">
+                    <span className="
+                        w-3
+                        h-3
+                        rounded-full
+                        bg-red-500
+                    " />
+                    <span className="
+                        w-3
+                        h-3
+                        rounded-full
+                        bg-yellow-500
+                    " />
+                    <span className="
+                        w-3
+                        h-3
+                        rounded-full
+                        bg-green-500
+                    " />
+                </div>
+
+                <span className="text-neutral-300">
+                    {file}
+                </span>
+
+                <span className="text-xs text-neutral-500">
+                    Ctrl+Q to exit
+                </span>
             </div>
 
-            <Editor
-                height="100%"
-                language={language}
-                value={code}
-                onChange={(value) => setCode(value ?? "")}
-                defaultValue={content}
-                theme="vs-dark"
-                onMount={handleEditorDidMount}
-                options={{
-                    automaticLayout: true,
-                    minimap: {
-                        enabled: false,
-                    },
-                    fontSize: 15,
-                }}
-            />
+            <div className="flex-1 min-h-0">
+                <Editor
+                    height="100%"
+                    language={language}
+                    value={code}
+                    onChange={(value) => setCode(value ?? "")}
+                    defaultValue={content}
+                    theme="vs-dark"
+                    onMount={handleEditorDidMount}
+                    options={{
+                        automaticLayout: true,
+                        minimap: { enabled: false },
+                        fontSize: 14,
+                        fontFamily: "'Geist Mono', 'Cascadia Code', 'Fira Code', monospace",
+                        padding: { top: 12 },
+                        scrollBeyondLastLine: false,
+                        renderLineHighlight: "gutter",
+                        smoothScrolling: true,
+                        cursorBlinking: "smooth",
+                        cursorSmoothCaretAnimation: "on",
+                    }}
+                />
+            </div>
 
         </div>
     );
