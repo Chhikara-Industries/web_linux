@@ -1,7 +1,6 @@
 "use client";
 
 import Editor, { OnMount } from "@monaco-editor/react";
-import * as monaco from "monaco-editor";
 import { useState } from "react";
 
 type EditorScreenProps = {
@@ -20,7 +19,7 @@ export default function EditorScreen({
 
     const [code, setCode] = useState(content);
 
-    const handleEditorDidMount: OnMount = (editor) => {
+    const handleEditorDidMount: OnMount = async (editor, monaco) => {
         editor.addCommand(
             monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyQ,
             () => onExit()
